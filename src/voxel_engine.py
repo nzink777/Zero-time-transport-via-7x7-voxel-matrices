@@ -93,3 +93,25 @@ if __name__ == "__main__":
     print(f"Post-Swap Source State (Photonic Backfill): {engine.get_state(source_address)}")
     print(f"Post-Swap Target State (Relocated Electron): {engine.get_state(target_address)}")
   
+
+    # Capture "After" state dataset for the z=10 plane
+    after_slice = engine.get_energy_slice(z_plane=10)
+
+    # 3. Output Visualization via Matplotlib (Before and After)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+    im1 = axes[0].imshow(before_slice, cmap='inferno', origin='lower')
+    axes[0].set_title("Before Swap: Electron at Source (15,15)")
+    axes[0].set_xlabel("X Voxel Index")
+    axes[0].set_ylabel("Y Voxel Index")
+    fig.colorbar(im1, ax=axes[0], label="Energy Density ($\sum |\Psi|^2$)")
+
+    im2 = axes[1].imshow(after_slice, cmap='inferno', origin='lower')
+    axes[1].set_title("After Swap: Relocated & Photonic Backfill")
+    axes[1].set_xlabel("X Voxel Index")
+    axes[1].set_ylabel("Y Voxel Index")
+    fig.colorbar(im2, ax=axes[1], label="Energy Density ($\sum |\Psi|^2$)")
+
+    plt.suptitle("Zero-Time Voxel Transport & Photonic Backfill Verification", fontsize=14)
+    plt.tight_layout()
+    plt.show()
