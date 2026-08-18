@@ -1,4 +1,4 @@
-import numpy as np
+   import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import dok_matrix
 
@@ -85,6 +85,7 @@ if __name__ == "__main__":
 
     # Execute workflow action
     engine.execute_bilateral_swap(source_address, target_address, unitary_7x7)
+
     
     before_slice = engine.get_energy_slice(z_plane=10)
     engine.execute_bilateral_swap(source_address, target_address)
