@@ -9,7 +9,9 @@ class VoxelGridEngine:
         self.epsilon_planck = 1e-9
 
     def _coord_to_index(self, coord):
-        x, y, z, t = coord
+        # Enforce T^7 toroidal boundary wrapping
+        wrapped_coords = tuple(c % self.size[i] for i, c in enumerate(coord[:3])) + (coord[3],)
+        x, y, z, t = wrapped_coords
         return x * (self.size[1] * self.size[2]) + y * self.size[2] + z
 
     def inject_state(self, coord, state_vector):
@@ -19,42 +21,71 @@ class VoxelGridEngine:
     def compute_energy(self, state_vector):
         return np.sum(np.abs(state_vector)**2)
 
-    def execute_bilateral_swap(self, source_coord, target_coord):
+    def compute_charge(self, state_vector):
+        # Assume standard fermionic U(1) charge mapping to the 0th component
+        return np.imag(state_vector[0])
+
+    def verify_unitarity(self, matrix_7x7):
+        """Verifies U^\dagger U = I for the 7x7 transformation operator."""
+        identity_check = np.dot(matrix_7x7.conjugate().T, matrix_7x7)
+        identity_matrix = np.eye(7, dtype=np.complex128)
+        return np.allclose(identity_check, identity_matrix, atol=1e-7)
+
+    def execute_bilateral_swap(self, source_coord, target_coord, transformation_matrix):
+        # 1. Verify Unitarity of the 7x7 matrix before executing
+        if not self.verify_unitarity(transformation_matrix):
+            raise ValueError("Transformation matrix violates unitarity (U^\dagger U != I). Swap aborted.")
+
         source_idx = self._coord_to_index(source_coord)
         target_idx = self._coord_to_index(target_coord)
 
         payload_state = self.lattice[source_idx, :].toarray()[0]
-        payload_energy = self.compute_energy(payload_state)
+        initial_energy = self.compute_energy(payload_state)
+        initial_charge = self.compute_charge(payload_state)
 
-        if payload_energy == 0:
-            raise ValueError("Source voxel is empty.")
+        if initial_energy == 0:
+            raise ValueError("Source voxel is empty. No payload to transport.")
 
-        # Relocate payload to target coordinate
-        self.lattice[target_idx, :] = payload_state
+        # Apply 7x7 transformation matrix to the payload state vector
+        transformed_payload = np.dot(transformation_matrix, payload_state)
 
-        # Backfill source with equivalent photonic standing wave
+        # 2. Relocate payload to target coordinate
+        self.lattice[target_idx, :] = transformed_payload
+
+        # 3. Construct equivalent photonic backfill for source coordinate
         photonic_backfill = np.zeros(7, dtype=np.complex128)
-        photonic_backfill[0] = np.sqrt(payload_energy / 2.0)
-        photonic_backfill[1] = np.sqrt(payload_energy / 2.0)
+        photonic_backfill[0] = np.sqrt(initial_energy / 2.0)
+        photonic_backfill[1] = np.sqrt(initial_energy / 2.0)
         self.lattice[source_idx, :] = photonic_backfill
 
-    def get_energy_slice(self, z_plane):
-        grid_slice = np.zeros((self.size[0], self.size[1]))
-        for x in range(self.size[0]):
-            for y in range(self.size[1]):
-                idx = self._coord_to_index((x, y, z_plane, 0))
-                state = self.lattice[idx, :].toarray()[0]
-                grid_slice[x, y] = self.compute_energy(state)
-        return grid_slice
+        # 4. Automated Conservation Assertions ($\Delta E = 0, \Delta Q = 0$)
+        final_system_energy = self.compute_energy(transformed_payload) + self.compute_energy(photonic_backfill)
+        final_system_charge = self.compute_charge(transformed_payload) + self.compute_charge(photonic_backfill)
+
+        delta_e = np.abs(final_system_energy - initial_energy)
+        delta_q = np.abs(final_system_charge - initial_charge)
+
+        assert delta_e < 1e-7, f"Energy conservation violation! Delta E = {delta_e}"
+        assert delta_q < 1e-7, f"Charge conservation violation! Delta Q = {delta_q}"
+        print(f"Swap verified: Delta E = {delta_e:.2e}, Delta Q = {delta_q:.2e} (Passed invariants)")
 
 if __name__ == "__main__":
     engine = VoxelGridEngine(size=(50, 50, 50))
     source_address = (15, 15, 10, 0)
     target_address = (35, 35, 10, 0)
 
+    # Construct a valid unitary 7x7 rotation matrix (mocking the Lie group generator exponentiation)
+    np.random.seed(42)
+    random_matrix = np.random.randn(7, 7) + 1j * np.random.randn(7, 7)
+    q, r = np.linalg.qr(random_matrix)  # QR decomposition yields a unitary matrix
+    unitary_7x7 = q
+
     electron_state = np.array([1.0 + 0j, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.complex128)
     engine.inject_state(source_address, electron_state)
 
+    # Execute with invariant assertions
+    engine.execute_bilateral_swap(source_address, target_address, unitary_7x7)
+    
     before_slice = engine.get_energy_slice(z_plane=10)
     engine.execute_bilateral_swap(source_address, target_address)
     after_slice = engine.get_energy_slice(z_plane=10)
