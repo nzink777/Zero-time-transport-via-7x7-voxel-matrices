@@ -28,7 +28,7 @@ jobs:
 
       - name: Run Voxel Transport Simulation Script
         run: |
-          python voxel_engine.py
+          python src/voxel_engine.py
 
       - name: Archive Simulation Visualizations
         uses: actions/upload-artifact@v4
